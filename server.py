@@ -65,20 +65,11 @@ async def abrir_vila(sid, dados=None):
         await recusar(sid, "A temporada já foi aberta", pedido)
         return
     estado["fase"] = "aberta"
+    sio.start_background_task(producao)      # temporizador de produção
     # servidor -> TODOS: o fato, com a causa (o pedido do Mestre)
     await sio.emit("vila.iniciada", fato(pedido))
-    
-@sio.on("construcao.solicitada")
-async def construir(sid, dados=None):
-    pedido = "construcao.solicitada"
-    # Ainda SEM validação (de propósito): a Etapa 4 corrige isso.
-    estado["algodao"] -= CUSTO
-    estado["trabalhadores"] += 1
-    estado["em_obra"] += 1
-    nome = jogadores[sid]["nome"]
-    # servidor -> TODOS: o fato, com a causa (o pedido do jogador) e quem pediu
-    await sio.emit("construcao.iniciada", fato(pedido, por=nome))
-    
+
+
 @sio.on("construcao.solicitada")
 async def construir(sid, dados=None):
     pedido = "construcao.solicitada"
@@ -103,3 +94,27 @@ async def construir(sid, dados=None):
     estado["em_obra"] += 1
     nome = jogadores[sid]["nome"]
     await sio.emit("construcao.iniciada", fato(pedido, por=nome))
+    sio.start_background_task(obra, nome)    # temporizador da obra
+    
+async def producao():
+    """Temporizador: a cada INTERVALO, produz algodão e avisa todos."""
+    while estado["fase"] == "aberta":
+        await sio.sleep(INTERVALO)          # sio.sleep, nunca time.sleep
+        if estado["fase"] != "aberta":
+            break
+        estado["algodao"] += estado["producao"]
+        await sio.emit("recurso.produzido", fato("temporizador"))
+
+
+async def obra(nome):
+    """Temporizador: depois de TEMPO_OBRA, o tear fica pronto."""
+    await sio.sleep(TEMPO_OBRA)
+    if estado["fase"] != "aberta":
+        return
+    estado["trabalhadores"] -= 1            # o tecelão fica livre
+    estado["em_obra"] -= 1
+    estado["concluidas"] += 1
+    estado["producao"] += 5                 # cada tear aumenta a produção de algodão
+    estado["tecido"] += 10                  # e entrega tecido (recurso refinado)
+    causa = "construcao.iniciada (temporizador)"
+    await sio.emit("construcao.concluida", fato(causa, por=nome))

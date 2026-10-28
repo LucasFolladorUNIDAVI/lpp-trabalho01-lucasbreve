@@ -485,7 +485,18 @@
           });
 
           // ETAPA 5: ouvir "recurso.produzido"     -> jogo.recursoProduzido(...)
+          ouvir("recurso.produzido", "atualiza o algodão e mostra o +N", (d) => {
+            atualizar(d);
+            jogo.recursoProduzido(d.estado);
+          });
+
           //          e "construcao.concluida"      -> jogo.obraConcluida(...)
+          ouvir("construcao.concluida", "transforma o canteiro em tear pronto", (d) => {
+            atualizar(d);
+            avisar("Tear de " + d.por + " pronto! A produção aumentou.", "ok");
+            jogo.obraConcluida(d.estado);
+          });
+
           // ETAPA 6: ouvir "vila.encerrada"        -> jogo.vilaEncerrada()
         }
 
@@ -501,6 +512,9 @@
           pedir("construcao.solicitada");
         }
         function encerrarVila() {
+          // ETAPA 5: ouvir "recurso.produzido"     -> jogo.recursoProduzido(...)
+          //          e "construcao.concluida"      -> jogo.obraConcluida(...)
+          // ETAPA 6: ouvir "vila.encerrada"        -> jogo.vilaEncerrada()
           // ETAPA 6: pedir "vila.encerramento_solicitado"
         }
 
