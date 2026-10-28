@@ -459,22 +459,29 @@
           // ===== ESCUTAS (on): o cliente reage aos FATOS do servidor =====
           // ouvir(evento, "o que o cliente faz ao receber", função)
           // ETAPA 1: ouvir "estado.sincronizado"   -> jogo.mostrarEstado(...)
-          // ETAPA 2: ouvir "vila.iniciada"         -> jogo.vilaIniciada()
-          // ETAPA 3: ouvir "construcao.iniciada"   -> jogo.obraIniciada(...)
-          // ETAPA 4: ouvir "operacao.recusada"     -> jogo.recusado(...)
-          // ETAPA 5: ouvir "recurso.produzido"     -> jogo.recursoProduzido(...)
-          //          e "construcao.concluida"      -> jogo.obraConcluida(...)
-          // ETAPA 6: ouvir "vila.encerrada"        -> jogo.vilaEncerrada()
           ouvir("estado.sincronizado", "guarda o estado e desenha a vila", (d) => {
             atualizar(d);
             jogo.mostrarEstado(d.estado);
           });
 
+          // ETAPA 2: ouvir "vila.iniciada"         -> jogo.vilaIniciada()
           ouvir("vila.iniciada", "muda a faixa para temporada aberta", (d) => {
             atualizar(d);
             avisar("A temporada começou!", "ok");
             jogo.vilaIniciada();
           });
+
+          // ETAPA 3: ouvir "construcao.iniciada"   -> jogo.obraIniciada(...)
+          ouvir("construcao.iniciada", "mostra o canteiro de obras", (d) => {
+            atualizar(d);
+            avisar(d.por + " iniciou um tear");
+            jogo.obraIniciada(d.estado);
+          });
+
+          // ETAPA 4: ouvir "operacao.recusada"     -> jogo.recusado(...)
+          // ETAPA 5: ouvir "recurso.produzido"     -> jogo.recursoProduzido(...)
+          //          e "construcao.concluida"      -> jogo.obraConcluida(...)
+          // ETAPA 6: ouvir "vila.encerrada"        -> jogo.vilaEncerrada()
         }
 
         // ===== PEDIDOS (emit): o cliente PEDE algo ao servidor =====
@@ -486,6 +493,7 @@
 
         function construir() {
           // ETAPA 3: pedir "construcao.solicitada"
+          pedir("construcao.solicitada");
         }
         function encerrarVila() {
           // ETAPA 6: pedir "vila.encerramento_solicitado"

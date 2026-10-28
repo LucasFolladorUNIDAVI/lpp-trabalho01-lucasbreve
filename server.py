@@ -67,3 +67,14 @@ async def abrir_vila(sid, dados=None):
     estado["fase"] = "aberta"
     # servidor -> TODOS: o fato, com a causa (o pedido do Mestre)
     await sio.emit("vila.iniciada", fato(pedido))
+    
+@sio.on("construcao.solicitada")
+async def construir(sid, dados=None):
+    pedido = "construcao.solicitada"
+    # Ainda SEM validação (de propósito): a Etapa 4 corrige isso.
+    estado["algodao"] -= CUSTO
+    estado["trabalhadores"] += 1
+    estado["em_obra"] += 1
+    nome = jogadores[sid]["nome"]
+    # servidor -> TODOS: o fato, com a causa (o pedido do jogador) e quem pediu
+    await sio.emit("construcao.iniciada", fato(pedido, por=nome))
