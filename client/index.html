@@ -209,6 +209,10 @@
           <progress :value="estado.trabalhadores" :max="estado.limite"></progress>
         </p>
         <p>🏠 Construções: {{ estado.concluidas }} concluídas, {{ estado.em_obra }} em obra</p>
+        <p v-if="estado.encomenda">📦 Encomenda aberta: {{ estado.encomenda.quantidade }} de tecido (prazo de {{
+          estado.encomenda.prazo }}s)</p>
+        <p v-else>📦 Nenhuma encomenda aberta</p>
+        <p>✅ Entregues: {{ estado.entregues }} · ⌛ Expiradas: {{ estado.expiradas }}</p>
       </section>
 
       <section>
@@ -216,7 +220,10 @@
           <button @click="abrirVila">Abrir temporada</button>
           <button @click="encerrarVila">Encerrar temporada</button>
         </template>
-        <button v-else @click="construir">🔨 Construir tear (custo {{ estado.custo }} de algodão)</button>
+        <template v-else>
+          <button @click="construir">🔨 Construir tear (custo {{ estado.custo }} de algodão)</button>
+          <button @click="entregarEncomenda">📦 Entregar encomenda</button>
+        </template>
       </section>
 
       <ul class="avisos">
@@ -398,6 +405,7 @@
         const estado = reactive({
           fase: "aguardando", algodao: 0, tecido: 0, trabalhadores: 0, limite: 0,
           producao: 0, intervalo: 0, tempo_obra: 0, custo: 0, concluidas: 0, em_obra: 0,
+          encomenda: null, entregues: 0, expiradas: 0,
         });
         const avisos = ref([]);
         const eventos = ref([]);              // linha do tempo do painel de eventos
@@ -503,6 +511,21 @@
             avisar("Temporada encerrada.");
             jogo.vilaEncerrada();
           });
+
+          ouvir("encomenda.recebida", "mostra a nova encomenda no painel", (d) => {
+            atualizar(d);
+            avisar("Nova encomenda: " + d.estado.encomenda.quantidade + " de tecido!");
+          });
+
+          ouvir("encomenda.entregue", "atualiza o estoque e comemora a entrega", (d) => {
+            atualizar(d);
+            avisar(d.por + " entregou a encomenda! +" + 40 + " de algodão", "ok");
+          });
+
+          ouvir("encomenda.expirada", "avisa que o prazo acabou", (d) => {
+            atualizar(d);
+            avisar("A encomenda expirou.", "erro");
+          });
         }
 
         // ===== PEDIDOS (emit): o cliente PEDE algo ao servidor =====
@@ -520,10 +543,12 @@
           // ETAPA 6: pedir "vila.encerramento_solicitado"
           pedir("vila.encerramento_solicitado");
         }
-
+        function entregarEncomenda() {
+          pedir("encomenda.entrega_solicitada");
+        }
         return {
           nome, papel, conectado, estado, avisos, eventosVisiveis, contadores, ocultarProducao, porMinuto,
-          entrar, abrirVila, construir, encerrarVila
+          entrar, abrirVila, construir, encerrarVila, entregarEncomenda
         };
       }
     }).mount("#app");

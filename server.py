@@ -10,6 +10,10 @@ app = socketio.ASGIApp(sio, static_files={
 CUSTO = 50        # algodão por tear
 TEMPO_OBRA = 8    # segundos até o tear ficar pronto
 INTERVALO = 5     # segundos entre as produções de algodão
+ENC_INTERVALO = 20   # segundos entre uma encomenda e a próxima tentativa
+ENC_QUANTIDADE = 20  # tecido pedido
+ENC_PRAZO = 30       # segundos até expirar
+ENC_RECOMPENSA = 40  # algodão ganho ao entregar
 
 estado = {
     "fase": "aguardando",   # aguardando -> aberta -> encerrada
@@ -23,10 +27,13 @@ estado = {
     "custo": CUSTO,
     "concluidas": 0,
     "em_obra": 0,
+    "encomenda": None,    # {"id": 1, "quantidade": 20, "prazo": 30} enquanto aberta
+    "entregues": 0,
+    "expiradas": 0,
 }
 
 jogadores = {}  # sid -> {"nome": ..., "papel": ...}
-
+proxima_encomenda = 0     # numera as encomendas (para o prazo saber qual expirar)
 
 def fato(causa, **extras):
     """Monta o payload de um FATO: estado atual + CAUSA (o evento ou
@@ -67,6 +74,7 @@ async def abrir_vila(sid, dados=None):
     estado["fase"] = "aberta"
     sio.start_background_task(producao)      # temporizador de produção
     # servidor -> TODOS: o fato, com a causa (o pedido do Mestre)
+    sio.start_background_task(encomendas)    # temporizador das encomendas
     await sio.emit("vila.iniciada", fato(pedido))
 
 
@@ -133,3 +141,58 @@ async def encerrar_vila(sid, dados=None):
     # servidor -> TODOS. Os temporizadores (producao e obra) conferem a fase
     # e param sozinhos; novas construções passam a ser recusadas.
     await sio.emit("vila.encerrada", fato(pedido))
+    
+async def encomendas():
+    """Temporizador: de tempos em tempos, surge uma encomenda de tecido."""
+    global proxima_encomenda
+    while estado["fase"] == "aberta":
+        await sio.sleep(ENC_INTERVALO)
+        if estado["fase"] != "aberta":
+            break
+        if estado["encomenda"] is not None:
+            continue                       # já há uma aberta: não surge outra
+        proxima_encomenda += 1
+        estado["encomenda"] = {"id": proxima_encomenda,
+                               "quantidade": ENC_QUANTIDADE, "prazo": ENC_PRAZO}
+        await sio.emit("encomenda.recebida", fato("temporizador"))
+        sio.start_background_task(prazo_encomenda, proxima_encomenda)
+
+
+async def prazo_encomenda(eid):
+    """Temporizador: se o prazo acabar sem entrega, a encomenda expira."""
+    await sio.sleep(ENC_PRAZO)
+    if estado["fase"] != "aberta":
+        return
+    enc = estado["encomenda"]
+    if enc is None or enc["id"] != eid:    # já foi entregue
+        return
+    estado["encomenda"] = None
+    estado["expiradas"] += 1
+    causa = "encomenda.recebida (temporizador)"
+    await sio.emit("encomenda.expirada", fato(causa))
+
+
+@sio.on("encomenda.entrega_solicitada")
+async def entregar_encomenda(sid, dados=None):
+    pedido = "encomenda.entrega_solicitada"
+    # Valide TUDO antes de alterar o estado e SEM await no meio:
+    # se dois jogadores entregam ao mesmo tempo, só o primeiro vence.
+    if estado["fase"] != "aberta":
+        motivo = "A temporada não está aberta"
+    elif estado["encomenda"] is None:
+        motivo = "Não há encomenda aberta (ou ela já expirou)"
+    elif estado["tecido"] < estado["encomenda"]["quantidade"]:
+        motivo = "Tecido insuficiente"
+    else:
+        motivo = None
+
+    if motivo:
+        await recusar(sid, motivo, pedido)   # só quem pediu recebe
+        return
+
+    estado["tecido"] -= estado["encomenda"]["quantidade"]
+    estado["algodao"] += ENC_RECOMPENSA
+    estado["encomenda"] = None
+    estado["entregues"] += 1
+    nome = jogadores[sid]["nome"]
+    await sio.emit("encomenda.entregue", fato(pedido, por=nome, recompensa=ENC_RECOMPENSA))
