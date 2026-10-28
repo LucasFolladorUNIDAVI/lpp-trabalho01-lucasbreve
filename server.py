@@ -118,3 +118,18 @@ async def obra(nome):
     estado["tecido"] += 10                  # e entrega tecido (recurso refinado)
     causa = "construcao.iniciada (temporizador)"
     await sio.emit("construcao.concluida", fato(causa, por=nome))
+    
+@sio.on("vila.encerramento_solicitado")
+async def encerrar_vila(sid, dados=None):
+    pedido = "vila.encerramento_solicitado"
+    # O servidor decide: só o Mestre encerra, e só se a temporada estiver aberta.
+    if jogadores[sid]["papel"] != "mestre":
+        await recusar(sid, "Só o Mestre pode encerrar a temporada", pedido)
+        return
+    if estado["fase"] != "aberta":
+        await recusar(sid, "A temporada não está aberta", pedido)
+        return
+    estado["fase"] = "encerrada"
+    # servidor -> TODOS. Os temporizadores (producao e obra) conferem a fase
+    # e param sozinhos; novas construções passam a ser recusadas.
+    await sio.emit("vila.encerrada", fato(pedido))
