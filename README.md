@@ -90,6 +90,7 @@ O cliente nunca altera o estado por conta própria: só muda quando chega um eve
 Usei o Claude (Anthropic) como apoio durante o trabalho: para organizar a especificação (`docs/especificacao.md`), conferir o código a cada etapa, achar erros e escrever este README. O código de cada etapa partiu do Guia de Implementação e do Kit Inicial do professor.
 
 O que eu mudei e decidi: Alterei os ícones iniciais para ícones relacionados ao meu tema (tecelagem). Alterei o mapa para que fique ambientado na parte de produção de tecido e produção de algodão da vila (mapa personalizado foi gerado pelo Claude).
+Quis que ficasse evidente a soliciatação de encomenda e adicionei um novo sprint e notificação em cenário.
 
 ## Extras
 
