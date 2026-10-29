@@ -208,7 +208,7 @@
         <p>👷 Trabalhadores: {{ estado.trabalhadores }}/{{ estado.limite }}
           <progress :value="estado.trabalhadores" :max="estado.limite"></progress>
         </p>
-        <p>🏠 Construções: {{ estado.concluidas }} concluídas, {{ estado.em_obra }} em obra</p>
+        <p>🧶 Teares: {{ estado.concluidas }} prontos, {{ estado.em_obra }} em obra</p>
         <p v-if="estado.encomenda">📦 Encomenda aberta: {{ estado.encomenda.quantidade }} de tecido (prazo de {{
           estado.encomenda.prazo }}s)</p>
         <p v-else>📦 Nenhuma encomenda aberta</p>
@@ -290,11 +290,15 @@
           mapa.createLayer("chao", tileset);
           mapa.createLayer("decoracao", tileset);
 
-          // 2) pontos marcados no mapa: onde ficam as obras e o acampamento de lenha
+          // 2) pontos marcados no mapa
           const pontos = mapa.getObjectLayer("pontos").objects;
           this.lotes = pontos.filter((p) => p.name.startsWith("lote"))
             .sort((a, b) => a.name.localeCompare(b.name, "pt", { numeric: true }));
           this.acampamento = pontos.find((p) => p.name === "acampamento");
+
+          this.entrega = pontos.find((p) => p.name === "entrega");   // onde fica o posto de entregas
+          if (this.entrega) this.add.sprite(this.entrega.x, this.entrega.y, "sprites", 2);   // quadro 2: o posto
+          this.encomenda = null;   // balão e barra da encomenda aberta (se houver)
 
           // 3) câmera: o mapa é pequeno (pixel art), então damos zoom 2x
           this.cameras.main.setZoom(2).centerOn(mapa.widthInPixels / 2, mapa.heightInPixels / 2);
@@ -310,6 +314,7 @@
 
           cena = this;
           fila.splice(0).forEach(([nome, args]) => this[nome](...args));
+
         }
 
         // ----- apoio -----
@@ -342,6 +347,7 @@
             this.criarCasa(p.x, p.y);
           }
           for (let i = 0; i < estado.em_obra; i++) this.criarObra(estado.tempo_obra * 1000);
+          if (estado.encomenda) this.encomendaRecebida(estado, false);
           if (estado.fase === "aberta") this.vilaIniciada();
           if (estado.fase === "encerrada") this.vilaEncerrada();
         }
@@ -357,7 +363,7 @@
           if (!obra) return;
           obra.canteiro.destroy(); obra.fundo.destroy(); obra.barra.destroy();
           this.criarCasa(obra.x, obra.y);
-          this.flutuar("🏠 Obra concluída!", obra.x, obra.y - 18, "#1b5e20");
+          this.flutuar("🧶 Tear pronto!", obra.x, obra.y - 18, "#1b5e20");
         }
         recursoProduzido(estado) {              // recurso.produzido
           this.flutuar("+" + estado.producao + " 🧵", this.acampamento.x, this.acampamento.y, "#1b5e20");
@@ -366,8 +372,54 @@
           this.cameras.main.shake(180, 0.006);
           this.flutuar("✋ " + motivo, this.larg / 2, this.alt - 28, "#b00020");
         }
+        // ----- encomenda: sinal visível no mapa, no posto de entregas -----
+        encomendaRecebida(estado, comBarra = true) {   // encomenda.recebida
+          this.limparEncomenda();
+          if (!this.entrega || !estado.encomenda) return;
+          const { x, y } = this.entrega;
+          const balao = this.add.text(x, y - 26, "📦 " + estado.encomenda.quantidade + " 🧵", {
+            fontSize: "8px", color: "#000000", backgroundColor: "#fff8c4",
+            padding: { x: 4, y: 2 }, resolution: 2,
+          }).setOrigin(0.5).setDepth(9);
+          const pulso = this.tweens.add({ targets: balao, y: balao.y - 3, yoyo: true, repeat: -1, duration: 450 });
+          this.encomenda = { balao, pulso };
+          if (!comBarra) return;   // quem entra com a encomenda já aberta não sabe quanto prazo resta
+          const fundo = this.add.rectangle(x - 12, y - 17, 24, 3, 0x333333).setOrigin(0, 0.5).setDepth(9);
+          const barra = this.add.rectangle(x - 12, y - 17, 24, 3, 0x4caf50).setOrigin(0, 0.5).setDepth(9);
+          const tempo = this.tweens.addCounter({
+            from: 1, to: 0, duration: estado.encomenda.prazo * 1000,
+            onUpdate: (t) => {
+              const v = t.getValue();
+              barra.scaleX = v;
+              barra.setFillStyle(v > 0.5 ? 0x4caf50 : v > 0.25 ? 0xffc107 : 0xe53935);
+            },
+          });
+          Object.assign(this.encomenda, { fundo, barra, tempo });
+        }
+        limparEncomenda() {
+          if (!this.encomenda) return;
+          const { balao, fundo, barra, pulso, tempo } = this.encomenda;
+          pulso.stop();
+          if (tempo) tempo.stop();
+          [balao, fundo, barra].forEach((o) => o && o.destroy());
+          this.encomenda = null;
+        }
+        encomendaEntregue(por, recompensa) {            // encomenda.entregue
+          this.limparEncomenda();
+          if (!this.entrega) return;
+          this.flutuar("✅ " + por + " entregou! +" + (recompensa || 40) + " 🧵",
+            this.entrega.x, this.entrega.y - 18, "#1b5e20");
+        }
+        encomendaExpirada() {                           // encomenda.expirada
+          this.limparEncomenda();
+          this.cameras.main.shake(180, 0.006);
+          if (!this.entrega) return;
+          this.flutuar("⌛ Encomenda expirou", this.entrega.x, this.entrega.y - 18, "#b00020");
+        }
+
         vilaEncerrada() {                       // vila.encerrada
           this.faixa.setText("🌙 Temporada encerrada");
+          this.limparEncomenda();
           this.add.rectangle(this.larg / 2, this.alt / 2, this.larg, this.alt, 0x000033, 0.35).setDepth(5);
         }
       }
@@ -387,6 +439,9 @@
         recursoProduzido: (...a) => chamar("recursoProduzido", ...a),
         recusado: (...a) => chamar("recusado", ...a),
         vilaEncerrada: (...a) => chamar("vilaEncerrada", ...a),
+        encomendaRecebida: (...a) => chamar("encomendaRecebida", ...a),
+        encomendaEntregue: (...a) => chamar("encomendaEntregue", ...a),
+        encomendaExpirada: (...a) => chamar("encomendaExpirada", ...a),
       };
     }
   </script>
@@ -512,18 +567,21 @@
             jogo.vilaEncerrada();
           });
 
-          ouvir("encomenda.recebida", "mostra a nova encomenda no painel", (d) => {
+          ouvir("encomenda.recebida", "mostra a nova encomenda no painel e no posto de entregas", (d) => {
             atualizar(d);
+            jogo.encomendaRecebida(d.estado);
             avisar("Nova encomenda: " + d.estado.encomenda.quantidade + " de tecido!");
           });
 
-          ouvir("encomenda.entregue", "atualiza o estoque e comemora a entrega", (d) => {
+          ouvir("encomenda.entregue", "atualiza o estoque e comemora a entrega no posto", (d) => {
             atualizar(d);
+            jogo.encomendaEntregue(d.por, d.recompensa);
             avisar(d.por + " entregou a encomenda! +" + 40 + " de algodão", "ok");
           });
 
-          ouvir("encomenda.expirada", "avisa que o prazo acabou", (d) => {
+          ouvir("encomenda.expirada", "avisa que o prazo acabou e apaga o balão", (d) => {
             atualizar(d);
+            jogo.encomendaExpirada();
             avisar("A encomenda expirou.", "erro");
           });
         }
